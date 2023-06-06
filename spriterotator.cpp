@@ -8,6 +8,39 @@
 #include "stb_image_write.h"
 #include "gif.h"
 
+void shear_x(int xshear, unsigned int* src, unsigned int* dst, int xsize, int ysize)
+{
+	for (int i = 0; i < ysize; i++)
+	{
+		for (int j = 0; j < xsize; j++)
+		{
+			int p = j + xshear * i / ysize - xshear / 2;
+			if (p >= 0 && p < xsize)
+			{
+				dst[i * xsize + p] = src[i * xsize + j];
+			}
+		}
+	}
+}
+
+void shear_y(int yshear, unsigned int* src, unsigned int* dst, int xsize, int ysize)
+{
+	for (int j = 0; j < xsize; j++)
+	{
+		for (int i = 0; i < ysize; i++)
+		{
+			int p = i + yshear * j / xsize - yshear / 2;
+			if (p >= 0 && p < ysize)
+			{
+				dst[p * xsize + j] = src[i * xsize + j];
+			}
+		}
+	}
+}
+
+bool optOutputGif = true;
+bool optOutputIntermediaries = false;
+
 int main(int parc, char** pars)
 {
 	if (parc < 3)
@@ -15,6 +48,7 @@ int main(int parc, char** pars)
 		printf("Usage:\n%s inputfile steps\nexample:\nship.png 32\n(generates 32 steps of rotating ship.png)\n", pars[0]);
 		return 0;
 	}
+
 	int x, y, comp;
 	stbi_uc * src = stbi_load(pars[1], &x, &y, &comp, 4);
 	if (src == 0)
@@ -22,8 +56,10 @@ int main(int parc, char** pars)
 		printf("Failed to load \"%s\"\n", pars[1]);
 		return 1;
 	}
+
 	int steps = atoi(pars[2]);
 	printf("Loaded %s (%d x %d), %d steps\n", pars[1], x, y, steps);
+	
 	int px = x;
 	int py = y;
 	if (x != y)
@@ -32,8 +68,9 @@ int main(int parc, char** pars)
 		if (py > px) px = py;
 		printf("Note: input non-square, output will be %d x %d\n", px, py);
 	}
+	
 	unsigned int bg = *((unsigned int*)src);
-	printf("Note: using top-left corner pixel as \"background\" (0x%04x)\n", bg);
+	printf("Using top-left corner pixel as \"background\" (0x%04x)\n", bg);
 
 	int ox = px * 2;
 	int oy = py * 2;
@@ -62,19 +99,23 @@ int main(int parc, char** pars)
 
 	stbi_image_free(src);
 
-	char temp[256];
-	snprintf(temp, 256, "%s_anim.gif", pars[1]);
-	printf("Writing animation preview to %s\n", temp);
-
 	GifWriter gif;
-	GifBegin(&gif, temp, px, py, 1);
+
+	if (optOutputGif)
+	{
+		char temp[256];
+		snprintf(temp, 256, "%s_anim.gif", pars[1]);
+		printf("Writing animation preview to %s\n", temp);
+
+		GifBegin(&gif, temp, px, py, 1);
+	}
 
 	for (int step = 0; step < steps; step++)
 	{
 		int fl = 0;
 		double angle = step * (3.142 * 2 / steps);
 		while (angle >= 3.142 / 2) { fl = !fl; angle -= 3.142; }
-		int xshear = (int)floor( - tan(angle / 2) * ox);
+		int xshear = (int)floor(-tan(angle / 2) * ox);
 		int yshear = (int)floor(sin(angle) * oy);
 		printf("Step %d: xshear %d, yshear %d, flip %d. ", step, xshear, yshear, fl);
 		for (int i = 0; i < ox * oy; i++)
@@ -83,55 +124,44 @@ int main(int parc, char** pars)
 			fb2[i] = bg;
 			fb3[i] = bg;
 		}
-		unsigned int* s = base;
-		if (fl) s = flip;
-		for (int i = 0; i < oy; i++)
-			for (int j = 0; j < ox; j++)
-			{
-				int p = j + xshear * i / oy - xshear / 2;
-				if (p >= 0 && p < ox)
-				{
-					fb1[i * ox + p] = s[i * ox + j];
-				}
-			}
-		
-		for (int j = 0; j < ox; j++)
-			for (int i = 0; i < oy; i++)
-			{
-				int p = i + yshear * j / ox - yshear / 2;
-				if (p >= 0 && p < oy)
-				{
-					fb2[p * ox + j] = fb1[i * ox + j];
-				}
-			}
+		unsigned int* src = base;
+		if (fl) src = flip;
 
-		for (int i = 0; i < oy; i++)
-			for (int j = 0; j < ox; j++)
-			{
-				int p = j + xshear * i / oy - xshear / 2;
-				if (p >= 0 && p < ox)
-				{
-					fb3[i * ox + p] = fb2[i * ox + j];
-				}
-			}
+		shear_x(xshear, src, fb1, ox, oy);
+		shear_y(yshear, fb1, fb2, ox, oy);
+		shear_x(xshear, fb2, fb3, ox, oy);
 
 		for (int i = 0; i < py; i++)
+		{
 			for (int j = 0; j < px; j++)
 			{
 				fb[i * px + j] = fb3[(i + py / 2) * ox + j + px / 2];
 			}
+		}
+
+		char temp[256];
 		snprintf(temp, 256, "%s_%03d.png", pars[1], step);
 		stbi_write_png(temp, px, py, 4, fb, px * 4);
 		printf("Wrote %s.\n", temp);
-		GifWriteFrame(&gif, (uint8_t*)fb, px, py, 1);
-		/*
-		snprintf(temp, 256, "1%s_%03d.png", pars[1], step);
-		stbi_write_png(temp, ox, oy, 4, fb1, ox * 4);
-		snprintf(temp, 256, "2%s_%03d.png", pars[1], step);
-		stbi_write_png(temp, ox, oy, 4, fb2, ox * 4);
-		*/
+
+		if (optOutputGif)
+		{
+			GifWriteFrame(&gif, (uint8_t*)fb, px, py, 1);
+		}
+		
+		if (optOutputIntermediaries)
+		{
+			snprintf(temp, 256, "%s_1_%03d.png", pars[1], step);
+			stbi_write_png(temp, ox, oy, 4, fb1, ox * 4);
+			snprintf(temp, 256, "%s_2_%03d.png", pars[1], step);
+			stbi_write_png(temp, ox, oy, 4, fb2, ox * 4);
+		}
 	}
-	GifEnd(&gif);
+
+	if (optOutputGif)
+	{
+		GifEnd(&gif);
+	}
 
 	return 0;
 }

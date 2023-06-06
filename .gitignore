@@ -1,0 +1,6 @@
+*.png
+*.gif
+spriterotator.vcxproj.filters
+spriterotator.vcxproj.user
+.vs/
+x64/
