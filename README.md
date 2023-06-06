@@ -16,10 +16,10 @@ of desired output frames.
 The tool outputs separate .png frames as well as a .gif animation preview.
 
 Options:
- -f output frames
- -s output safe frame
- -g output preview gif animation
- -i output intermediary files
+- -f output frames
+- -s output safe frame
+- -g output preview gif animation
+- -i output intermediary files
  
  Frames are what you most likely want eventually.
  
