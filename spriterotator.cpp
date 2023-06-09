@@ -8,13 +8,24 @@
 #include "stb_image_write.h"
 #include "gif.h"
 
-void shear_x(int xshear, const unsigned int* src, unsigned int* dst, int xsize, int ysize)
+#ifndef M_PI
+#define M_PI 3.1415926535897932384626433832795
+#endif
+
+bool optOutputGif = false;
+bool optOutputIntermediaries = false;
+bool optOutputSafeFrame = false;
+bool optOutputFrames = false;
+bool optRound = true;
+
+void shear_x(double xshear, const unsigned int* src, unsigned int* dst, int xsize, int ysize)
 {
+	double rr = optRound ? 0.5 : 0;
 	for (int i = 0; i < ysize; i++)
 	{
 		for (int j = 0; j < xsize; j++)
 		{
-			int p = j + xshear * i / ysize - xshear / 2;
+			int p = (int)floor(rr + j + (i - (ysize / 2.0)) * xshear);
 			if (p >= 0 && p < xsize)
 			{
 				dst[i * xsize + p] = src[i * xsize + j];
@@ -23,13 +34,15 @@ void shear_x(int xshear, const unsigned int* src, unsigned int* dst, int xsize, 
 	}
 }
 
-void shear_y(int yshear, const unsigned int* src, unsigned int* dst, int xsize, int ysize)
+void shear_y(double yshear, const unsigned int* src, unsigned int* dst, int xsize, int ysize)
 {
+	double rr = optRound ? 0.5 : 0;
+
 	for (int j = 0; j < xsize; j++)
 	{
 		for (int i = 0; i < ysize; i++)
 		{
-			int p = i + yshear * j / xsize - yshear / 2;
+			int p = (int)floor(rr + i + (j - (xsize / 2.0)) * yshear);
 			if (p >= 0 && p < ysize)
 			{
 				dst[p * xsize + j] = src[i * xsize + j];
@@ -38,10 +51,6 @@ void shear_y(int yshear, const unsigned int* src, unsigned int* dst, int xsize, 
 	}
 }
 
-bool optOutputGif = false;
-bool optOutputIntermediaries = false;
-bool optOutputSafeFrame = false;
-bool optOutputFrames = false;
 
 int main(int parc, char** pars)
 {
@@ -56,6 +65,7 @@ int main(int parc, char** pars)
 			"-i output intermediaries (for debug)\n"
 			"-s output safe frame template\n"
 			"-f output frames\n"
+			"-t truncate instead of rounding\n"
 			"\n"
 			"Example:\n"
 			"  %s -g -f ship.png 32\n"
@@ -85,6 +95,7 @@ int main(int parc, char** pars)
 			case 'i': optOutputIntermediaries = true; break;
 			case 's': optOutputSafeFrame = true; break;
 			case 'f': optOutputFrames = true; break;
+			case 't': optRound = false; break;
 			default:
 				printf("Error: unknown flag: %s\n", pars[i]);
 				return 0;
@@ -151,13 +162,12 @@ int main(int parc, char** pars)
 				base[(i + py / 2) * ox + j + px / 2] = 0xffffffff;
 			}
 		}
-
 		for (int step = 0; step < steps / 4 + 1; step++)
 		{
-			double angle = step * (3.142 * 2 / steps);
-			while (angle >= 3.142 / 2) { angle -= 3.142; }
-			int xshear = (int)floor(-tan(angle / 2) * ox);
-			int yshear = (int)floor(sin(angle) * oy);
+			double angle = step * (M_PI * 2 / steps);
+			while (angle >= M_PI / 2) { angle -= M_PI; }
+			double xshear = -tan(angle / 2);
+			double yshear = sin(angle);
 
 			shear_x(xshear, base, fb1, ox, oy);
 			shear_y(yshear, fb1, fb2, ox, oy);
@@ -234,13 +244,14 @@ int main(int parc, char** pars)
 		GifBegin(&gif, temp, px, py, 1);
 	}
 
+
 	for (int step = 0; step < steps; step++)
 	{
 		int fl = 0;
-		double angle = step * (3.142 * 2 / steps);
-		while (angle >= 3.142 / 2) { fl = !fl; angle -= 3.142; }
-		int xshear = (int)floor(-tan(angle / 2) * ox);
-		int yshear = (int)floor(sin(angle) * oy);
+		double angle = step * (M_PI * 2 / steps);
+		while (angle >= M_PI / 2) { fl = !fl; angle -= M_PI; }
+		double xshear =-tan(angle / 2);
+		double yshear =sin(angle);
 		//printf("Step %d: xshear %d, yshear %d, flip %d. ", step, xshear, yshear, fl);
 		for (int i = 0; i < ox * oy; i++)
 		{
